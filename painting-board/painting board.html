@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="utf-8">
+        <title>painting board</title>
+        <link rel="stylesheet" href="style.css">
+    </head>
+    <body>
+        <div class="navbar">
+            <div class="container">
+                <div class="tools">
+                    <span class="curve shape active" id="0">曲线</span>
+                    <span class="line shape" id="1">直线</span>
+                    <span class="circle shape" id="2">圆</span>
+                    <span class="rectangle shape" id="3">矩形</span>
+                    <span class="rectangle shape" id="4">椭圆</span>
+                    <span class="eraser shape" id="5">橡皮擦</span>
+                    <span class="shape dropdown">
+                        <span>颜色</span>
+                        <div class="dropdown-content">
+                            <input type="color" id="colorselector">
+                        </div>
+                    </span>
+                    <span class="shape dropdown">
+                        <span>笔画粗细</span>
+                        <div class="dropdown-content">
+                            <input type="number" min="1" max="5" id="widthselector" value="2">
+                        </div>
+                    </span>
+                    <span class="shape" id="recall">撤销</span>
+                    <span class="shape" id="clear">清空</span>
+                    <span class="shape" id="save">保存</span>
+                    <span class="shape" id="load">载入</span>
+                </div>
+            </div>
+        </div>
+        <div class="container">
+            <canvas id="myCanvas" width="900" height="700"></canvas>
+        </div>
+        <script type="text/javascript" src="Shape.js"></script>
+        <script type="text/javascript" src="Arc.js"></script>
+        <script type="text/javascript" src="Line.js"></script>
+        <script type="text/javascript" src="Circle.js"></script>
+        <script type="text/javascript" src="Rectangle.js"></script>
+		<script type="text/javascript" src="Eraser.js"></script>
+        <script type="text/javascript" src="Brush.js"></script>
+        <script type="text/javascript" src="Ellipse.js"></script>
+        <script type="text/javascript">
+            var canvas = document.getElementById('myCanvas')
+            var context = canvas.getContext('2d')
+            var typenumber = 5
+            // JSON集合
+            var JSONLIST = []
+            // 桶思想，坐标保存对象
+            var martix = []
+            // 画笔类型按钮的集合
+            var btnlist = document.getElementsByClassName('shape')
+            // canvas的宽高
+            var width = canvas.width, height = canvas.height
+            // 颜色选择器
+            var colorselector = document.getElementById('colorselector')
+            // 画笔宽度选择器
+            var widthselector = document.getElementById('widthselector')
+            // 撤回按钮
+            var recallbtn = document.getElementById('recall')
+            // 清空按钮
+            var clearbtn = document.getElementById('clear')
+            // 保存按钮
+            var savebtn = document.getElementById('save')
+            // 载入按钮
+            var loadbtn = document.getElementById('load')
+            // 笔画宽度和颜色
+            var strokewidth = 2, strokecolor = '#000000'
+            // data是当前的canvas的像素集合
+            // datalist是曾经使用过的data的集合
+            // 每创建一个shape对象就push到shapelist里
+            var data, datalist = [], shapelist = []
+
+            // 注册动作监听事件函数
+            function registerAllEventListener(brush, eraser)
+            {
+                // 为前五个基本工具添加动作监听
+                for (var i = 0; i < typenumber + 1; i++)
+				{
+                    btnlist[i].addEventListener('click', function(){
+                        brush.setType(parseInt(this.id))
+                        for (var j = 0; j < btnlist.length; j++) {
+                            if(j == this.id)
+                                this.classList.add('active')
+                            else
+                                btnlist[j].classList.remove('active')
+                        }
+                    })
+                }
+                // 画笔颜色
+                colorselector.addEventListener('change', function(){
+                    strokecolor = colorselector.value
+                })
+                // 画笔粗细
+                widthselector.addEventListener('change', function(){
+                    strokewidth = widthselector.value
+                })
+                // 撤销功能
+                recallbtn.addEventListener('click', function(){
+					if(!shapelist.length || !datalist.length) {
+						alert('没有上一步了(T ^ T) ')
+						return
+					}
+                    if(shapelist.length != 0)
+						shapelist.pop()
+                    if(datalist.length != 0) {
+                        context.putImageData(datalist[datalist.length-1], 0, 0)
+                        datalist.pop()
+                    }
+                })
+                // 清空功能
+                clearbtn.addEventListener('click', function(){
+                    while(shapelist.pop()){}
+                    while(datalist.pop()){}
+                    for (var i = 0; i < 1000; i++) {
+                        martix[i] = []
+                        for(var j = 0; j < 1000; j++) {
+                            martix[i][j] = []
+                        }
+                    }
+                    context.clearRect(0, 0, width, height)
+                })
+                // 保存功能
+                savebtn.addEventListener('click', function(){
+                    while(JSONLIST.pop()){}
+                    for (var i = 0; i < shapelist.length; i++) {
+                        JSONLIST.push(shapelist[i])
+                    }
+                    localStorage.setItem('myimage', JSON.stringify(JSONLIST))
+                    alert('已保存，要使用载入即可(～￣▽￣)～ ')
+                })
+                // 载入功能
+                loadbtn.addEventListener('click', function(){
+                    var loadmessage = localStorage.getItem('myimage')
+                    loadmessage = JSON.parse(loadmessage)
+					if(loadmessage.length == 0) {
+						alert('没有初始数据啦〒▽〒')
+						return
+					}
+                    while(shapelist.pop()){}
+					while(datalist.pop()){}
+                    context.clearRect(0, 0, width, height)
+					datalist.push(context.getImageData(0, 0, width, height))
+                    for(var i = 0; i < loadmessage.length; i++) {
+                        var load_this_shape
+                        switch (loadmessage[i]['name']) {
+                            case 'Arc':
+                                load_this_shape = new Arc()
+                                break
+                            case 'Line':
+                                load_this_shape = new Line()
+                                break
+                            case 'Circle':
+                                load_this_shape = new Circle()
+                                break
+                            case 'Rectangle':
+                                load_this_shape = new Rectangle()
+                                break
+                            case 'Ellipse':
+                                load_this_shape = new Ellipse()
+                                break
+                            default:
+                                break
+                        }
+                        load_this_shape.resetSelf(loadmessage[i])
+                        context.clearRect(0, 0, width, height)
+                        load_this_shape.drawSelf()
+                        bfs(load_this_shape)
+                        context.clearRect(0, 0, width, height)
+                        context.putImageData(datalist[datalist.length-1], 0, 0)
+                        load_this_shape.drawSelf()
+                        shapelist.push(load_this_shape)
+						if(i != loadmessage.length-1)
+							datalist.push(context.getImageData(0, 0, width, height))
+                        alert('载入成功(～￣▽￣)～ ')
+                    }
+                })
+
+                canvas.addEventListener('mousedown', function(event){
+
+                    if(event.button == 0 && brush.type != typenumber)
+                    {
+                        brush.ismousedown = true
+                        brush.draw()
+                        brush.now_use_shape.init(event.offsetX, event.offsetY)
+                        data = context.getImageData(0, 0, width, height)
+                    }
+					else if(event.button == 0 && brush.type == typenumber)
+					{
+                        console.log(event.offsetX,event.offsetY);
+                        console.log(martix[event.offsetX][event.offsetY]);
+						eraser.setPosition(event.offsetX, event.offsetY)
+						eraser.clear()
+					}
+                })
+                canvas.addEventListener('mousemove', function(event){
+                    if(brush.ismousedown)
+                    {
+                        context.clearRect(0, 0, width, height)
+                        context.putImageData(data, 0, 0)
+                        brush.now_use_shape.setNowPosition(event.offsetX, event.offsetY)
+                        brush.now_use_shape.drawSelf()
+                    }
+                })
+                window.addEventListener('mouseup', function(event){
+                    if(brush.ismousedown) {
+                        brush.now_use_shape.setNowPosition(event.offsetX, event.offsetY)
+                        var start = brush.getStartPosition()[0] +''+ brush.getStartPosition()[1]
+                        var end = brush.getNowPosition()[0] +''+ brush.getNowPosition()[1]
+                        context.clearRect(0, 0, width, height)
+                        if(start != end) {
+                            datalist.push(data)
+                            shapelist.push(brush.now_use_shape)
+                            // 为了获取这次所绘图形所占像素位置
+                            brush.now_use_shape.drawSelf()
+                            bfs(brush.now_use_shape)
+                            context.clearRect(0, 0, width, height)
+                            context.putImageData(data, 0, 0)
+                            brush.now_use_shape.drawSelf()
+                        }
+                        else {
+                            context.putImageData(data, 0, 0)
+                        }
+                        brush.ismousedown = false
+                    }
+                })
+            }
+
+            // 主函数
+            function __main__()
+            {
+                for (var i = 0; i < 1000; i++) {
+                    martix[i] = []
+                    for(var j=0; j < 1000; j++) {
+                        martix[i][j] = []
+                    }
+                }
+                // 在主活动创建一个笔刷
+                var brush = new Brush()
+				// 在主活动创建一个橡皮擦
+				var eraser = new Eraser()
+                // 注册全部的监听事件
+                registerAllEventListener(brush, eraser)
+                // 为笔刷注册曲线
+                brush.registerAction(function() {
+                    var temparc = new Arc()
+                    return temparc
+                })
+                // 为笔刷注册直线
+                brush.registerAction(function() {
+                    var templine = new Line()
+                    return templine
+                })
+                // 为笔刷注册圆
+                brush.registerAction(function() {
+                    var tempcircle = new Circle()
+                    return tempcircle
+                })
+                // 为笔刷注册矩形
+                brush.registerAction(function() {
+                    var temprectangle  = new Rectangle()
+                    return temprectangle
+                })
+                // 为笔刷注册椭圆
+                brush.registerAction(function() {
+                    var tempellipse  = new Ellipse()
+                    return tempellipse
+                })
+            }
+
+
+            function bfs(obj)
+            {
+                var step = 8
+                var dx = [0,1,0,-1]
+                var dy = [-1,0,1,0]
+                var queue = []
+                var mark = []
+                for (var i = 0; i < width+3; i++) {
+                    mark[i] = []
+                    for(var j=0; j < height+3; j++) {
+                        mark[i][j] = false
+                    }
+                }
+                var x = parseInt(obj.getStartPosition()[0])
+                var y = parseInt(obj.getStartPosition()[1])
+                queue.push([x,y])
+                mark[x][y] = true
+                if(obj.name != 'Ellipse') {
+                    x = obj.nowX
+                    y = obj.nowY
+                    queue.push([x,y])
+                    mark[x][y] = true
+                }
+                var nownode
+            	while(nownode = queue.shift())
+            	{
+                    // bfs基于问题本身做了个小优化
+                    // 本身
+                    martix[nownode[0]][nownode[1]].push(obj)
+                    // 右
+                    martix[nownode[0]+step/2][nownode[1]].push(obj)
+                    // 下
+                    martix[nownode[0]][nownode[1]+step/2].push(obj)
+                    // 右下
+                    martix[nownode[0]+step/2][nownode[1]+step/2].push(obj)
+
+            		for(var i=0;i<4;++i)
+            		{
+                        var next_x = nownode[0]+dx[i]*step
+                        var next_y = nownode[1]+dy[i]*step
+            			if(next_x<0||next_x>=width||next_y<0||next_y>=height)
+            				continue
+                        var tempdata = context.getImageData(next_x, next_y, step, step).data
+                        var fuck = 0
+            			for(var j=3;j<step*step*4;) {
+                            fuck += tempdata[j]
+                            j = j + 4
+                        }
+                        if(fuck == 0)
+            				continue
+                        if(mark[next_x][next_y])
+                            continue
+                        queue.push([next_x,next_y])
+                        mark[next_x][next_y] = true
+            		}
+            	}
+            }
+
+            // 主入口
+            __main__()
+        </script>
+    </body>
+</html>
